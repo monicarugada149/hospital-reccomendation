@@ -1,0 +1,6 @@
+{
+  "name": "DiagHospital - Medical Facility & Diagnostic Image Recommender",
+  "description": "Intelligent medical facility recommendation platform that identifies specialized hospitals, clinical equipment, and triage urgency based on uploaded diagnostic imagery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
