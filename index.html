@@ -12,10 +12,31 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@n8n/chat/dist/style.css" rel="stylesheet" />
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-teal-500/20 selection:text-teal-900">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/dist/chat.bundle.es.js';
+
+      createChat({
+        webhookUrl: 'https://monicarugada.app.n8n.cloud/webhook/91a73e34-da4e-4ac8-8bc2-6464c0ed9653/chat',
+        initialMessages: [
+          'Hello! 👋 Welcome to DiagHospital.',
+          'I am your n8n AI Medical Agent. How can I assist you with specialized hospital facilities, imaging scans, or clinical appointments?'
+        ],
+        i18n: {
+          en: {
+            title: 'DiagHospital AI Agent',
+            subtitle: 'Powered by n8n Cloud',
+            footer: 'DiagHospital Clinical Recommender',
+            getStarted: 'Start Consultation',
+            inputPlaceholder: 'Ask a question...',
+          },
+        },
+      });
+    </script>
   </body>
 </html>
 

@@ -265,15 +265,101 @@ Be precise, respectful, and clinically sound.
   }
 });
 
-// API Route: Interactive facility inquiry & consultation assistant
+const N8N_CHAT_WEBHOOK_URL =
+  process.env.N8N_CHAT_WEBHOOK_URL ||
+  'https://monicarugada.app.n8n.cloud/webhook/91a73e34-da4e-4ac8-8bc2-6464c0ed9653/chat';
+
+// API Route: Interactive facility inquiry & consultation assistant (routes to n8n webhook with Gemini fallback)
 app.post('/api/chat-facility-query', async (req, res) => {
   try {
-    const { message, diagnosticContext, chatHistory = [] } = req.body;
+    const { message, chatInput, sessionId, diagnosticContext, chatHistory = [] } = req.body;
+    const queryText = (message || chatInput || '').trim();
 
-    if (!message) {
+    if (!queryText) {
       return res.status(400).json({ error: 'Message is required.' });
     }
 
+    // 1. Attempt sending to user's n8n AI webhook agent
+    let n8nReply: string | null = null;
+    try {
+      const n8nController = new AbortController();
+      const n8nTimeout = setTimeout(() => n8nController.abort(), 15000); // 15-second timeout for n8n
+
+      const n8nResponse = await fetch(N8N_CHAT_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*',
+        },
+        body: JSON.stringify({
+          action: 'sendMessage',
+          chatInput: queryText,
+          message: queryText,
+          sessionId: sessionId || 'default-session',
+          diagnosticContext: diagnosticContext || null,
+        }),
+        signal: n8nController.signal,
+      });
+
+      clearTimeout(n8nTimeout);
+
+      if (n8nResponse.ok) {
+        const contentType = n8nResponse.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const n8nData: any = await n8nResponse.json();
+          if (typeof n8nData === 'string') {
+            n8nReply = n8nData;
+          } else if (Array.isArray(n8nData) && n8nData.length > 0) {
+            const first = n8nData[0];
+            n8nReply =
+              first.output ||
+              first.text ||
+              first.response ||
+              first.reply ||
+              first.message ||
+              (typeof first === 'string' ? first : null);
+          } else if (n8nData && typeof n8nData === 'object') {
+            n8nReply =
+              n8nData.output ||
+              n8nData.text ||
+              n8nData.response ||
+              n8nData.reply ||
+              n8nData.message ||
+              (n8nData.data && (n8nData.data.output || n8nData.data.text));
+          }
+        } else {
+          const rawText = await n8nResponse.text();
+          if (rawText && rawText.trim().length > 0) {
+            try {
+              const parsed = JSON.parse(rawText);
+              n8nReply =
+                parsed.output ||
+                parsed.text ||
+                parsed.response ||
+                parsed.reply ||
+                parsed.message ||
+                rawText;
+            } catch {
+              n8nReply = rawText;
+            }
+          }
+        }
+      } else {
+        console.warn(`n8n webhook returned status ${n8nResponse.status}: ${n8nResponse.statusText}`);
+      }
+    } catch (n8nError: any) {
+      console.warn('n8n webhook call failed or timed out, falling back to Gemini:', n8nError?.message);
+    }
+
+    if (n8nReply && n8nReply.trim().length > 0) {
+      return res.json({
+        success: true,
+        reply: n8nReply.trim(),
+        source: 'n8n',
+      });
+    }
+
+    // 2. Fallback: Gemini Clinical Intelligence Concierge
     const ai = getGeminiClient();
 
     const systemPrompt = `
@@ -292,7 +378,7 @@ Guidelines:
     const contents = [
       {
         role: 'user',
-        parts: [{ text: `System Context:\n${systemPrompt}\n\nPatient Query: ${message}` }],
+        parts: [{ text: `System Context:\n${systemPrompt}\n\nPatient Query: ${queryText}` }],
       },
     ];
 
@@ -307,6 +393,7 @@ Guidelines:
     return res.json({
       success: true,
       reply: response.text || 'I am ready to assist with any questions about your recommended hospital facilities.',
+      source: 'gemini',
     });
   } catch (error: any) {
     console.error('Error in chat-facility-query:', error);
@@ -338,7 +425,12 @@ const setupServer = async () => {
   });
 };
 
-setupServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (!process.env.VERCEL) {
+  setupServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
+
+export default app;
+

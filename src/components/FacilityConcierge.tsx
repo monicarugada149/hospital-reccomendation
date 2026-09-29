@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MessageSquare, Send, Sparkles, Bot, User, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { MessageSquare, Send, Sparkles, Bot, User, Loader2, Workflow } from 'lucide-react';
 import { DiagnosticAnalysis } from '../types/diagnostic';
 
 interface FacilityConciergeProps {
@@ -11,15 +11,30 @@ interface Message {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  source?: 'n8n' | 'gemini';
 }
 
 export const FacilityConcierge: React.FC<FacilityConciergeProps> = ({ diagnosticContext }) => {
+  const sessionIdRef = useRef<string>('');
+
+  useEffect(() => {
+    // Generate or retrieve persistent sessionId for n8n multi-turn memory
+    const existing = sessionStorage.getItem('diaghospital_chat_session');
+    if (existing) {
+      sessionIdRef.current = existing;
+    } else {
+      const newId = `n8n_sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      sessionIdRef.current = newId;
+      sessionStorage.setItem('diaghospital_chat_session', newId);
+    }
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       sender: 'assistant',
       text: diagnosticContext
-        ? `Hello, I'm your DiagHospital Clinical Navigator. I've reviewed your ${diagnosticContext.modality} analysis. You can ask me anything about the recommended hospitals, equipment on-site (such as 3T MRI or Level 1 Trauma), appointment logistics, or how to prepare your referral questions.`
+        ? `Hello, I'm your DiagHospital Clinical Navigator powered by your n8n workflow agent. I've reviewed your ${diagnosticContext.modality} analysis. You can ask me anything about the recommended hospitals, equipment on-site (such as 3T MRI or Level 1 Trauma), appointment logistics, or how to prepare your referral questions.`
         : 'Welcome! Upload a diagnostic scan or select a sample scan above, and I can answer questions about matching hospitals, imaging modalities, and appointment preparation.',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
@@ -59,6 +74,8 @@ export const FacilityConcierge: React.FC<FacilityConciergeProps> = ({ diagnostic
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: q.trim(),
+          chatInput: q.trim(),
+          sessionId: sessionIdRef.current,
           diagnosticContext,
         }),
       });
@@ -72,6 +89,7 @@ export const FacilityConcierge: React.FC<FacilityConciergeProps> = ({ diagnostic
             sender: 'assistant',
             text: data.reply,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            source: data.source,
           },
         ]);
       } else {
@@ -104,12 +122,18 @@ export const FacilityConcierge: React.FC<FacilityConciergeProps> = ({ diagnostic
           <div>
             <div className="text-xs font-bold leading-tight flex items-center gap-1.5">
               <span>Facility Navigator & Appointment Concierge</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             </div>
             <div className="text-[11px] text-slate-400">
               Assisting with hospital logistics, equipment questions & visit prep
             </div>
           </div>
+        </div>
+
+        {/* n8n Status Badge */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/90 border border-slate-700/80 text-[11px] text-teal-300 font-mono shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <Workflow className="w-3 h-3 text-teal-400" />
+          <span className="hidden sm:inline">n8n Connected</span>
         </div>
       </div>
 
